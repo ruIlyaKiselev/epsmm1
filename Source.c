@@ -1,4 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
+﻿#define _CRT_SECURE_NO_WARNINGS
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <stdio.h>
@@ -21,45 +21,47 @@ inline void initArrays(const int Nx, const int Ny, double* U0, double* U1, doubl
     }
 }
 
-double functionF(int i, int j, int n, int Nx, int Ny, int Sx, int Sy) {
-    double f0 = 1.0;
-    double t0 = 1.5;
-    double gamma = 4.0;
-    double tao = calculateTao(Nx, Ny);
+inline double functionF(int n, int Nx, int Ny, double tao) {
+    const double f0 = 1.0;
+    const double t0 = 1.5;
+    const double gamma = 4.0;
+    double expPart = (2 * M_PI * f0 * (n * tao - t0));
 
-    if (j == Sx && i == Sy) {
-        return exp(-((2 * M_PI * f0 * (n * tao - t0)) * (2 * M_PI * f0 * (n * tao - t0))) / (gamma * gamma)) * sin(2 * M_PI * f0 * (n * tao - t0));
-    }
-
-    return 0;
-}
-
-void algorithmStep(int i, int j, int n, int Nx, int Ny, int Sx, int Sy, double Hx, double Hy, const double* U0, const double* U1, double* U2, const double* P) {
-    double tao = calculateTao(Nx, Ny);
-
-    double U1ij = *(U1 + i * Ny + j); // we use it 5 times (5 memory access operation), in this case we use memory access 1 times (5 times instead)
-    double Pij = *(P + i * Ny + j); // it works for other matrix elements from P, we take value by address once, but use it 2 times
-    double Pim1jm1 = *(P + (i - 1) * Ny + j - 1); 
-    double Pim1j = *(P + (i - 1) * Ny + j);
-    double Pijm1 = *(P + i * Ny + j - 1);
-
-    double leftPartX = (*(U1 + i * Ny + j + 1) - U1ij) * (Pim1j + Pij);
-    double rightPartX = (*(U1 + i * Ny + j - 1) - U1ij) * (Pim1jm1 + Pijm1);
-    double leftPartY = (*(U1 + (i + 1) * Ny + j) - U1ij) * (Pijm1 + Pij);
-    double rightPartY = (*(U1 + (i - 1) * Ny + j) - U1ij) * (Pim1jm1 + Pim1j);
-
-    double partX = (leftPartX + rightPartX) * Hx;
-    double partY = (leftPartY + rightPartY) * Hy;
-
-    *(U2 + i * Ny + j) = 2 * *(U1 + i * Ny + j) - *(U0 + i * Ny + j) + tao * tao * (functionF(i, j, n, Nx, Ny, Sx, Sy) + partX + partY);
+    return exp(-(expPart * expPart) / (gamma * gamma)) * sin(2 * M_PI * f0 * (n * tao - t0));
 }
 
 void processAlgorithm(int Nx, int Ny, int Nt, int Sx, int Sy, double Hx, double Hy, const double* U0, const double* U1, double* U2, const double* P) {
+    double tao = calculateTao(Nx, Ny);
+    
     for (int n = 1; n != Nt; n++) {
         //double Umax = 0.0;
+        double functionFValue = functionF(n, Nx, Ny, tao);
         for (int i = 1; i != Nx - 2; i++) {
-            for (int j = 1; j != Ny - 2; j++) {
-                algorithmStep(i, j, n, Nx, Ny, Sx, Sy, Hx, Hy, U0, U1, U2, P);
+            double U1ijm1 = *(U1 + i * Ny);
+            double U1ij = *(U1 + i * Ny + 1);
+            double Pijm1 = *(P + i * Ny);
+            for (int j = 1; j != Ny - 2; j++) {  
+                double U1ijp1 = *(U1 + i * Ny + j + 1);
+                double Pij = *(P + i * Ny + j);
+                
+                double Pim1jm1 = *(P + (i - 1) * Ny + j - 1);
+                double Pim1j = *(P + (i - 1) * Ny + j);
+
+                double leftPartX = (U1ijp1 - U1ij) * (Pim1j + Pij);
+                double rightPartX = (U1ijm1 - U1ij) * (Pim1jm1 + Pijm1);
+                double leftPartY = (*(U1 + (i + 1) * Ny + j) - U1ij) * (Pijm1 + Pij);
+                double rightPartY = (*(U1 + (i - 1) * Ny + j) - U1ij) * (Pim1jm1 + Pim1j);
+
+                double partX = (leftPartX + rightPartX) * Hx;
+                double partY = (leftPartY + rightPartY) * Hy;
+
+                double functionFResult = (j == Sx && i == Sy) ? functionFValue : 0;
+
+                *(U2 + i * Ny + j) = 2 * U1ij - *(U0 + i * Ny + j) + tao * tao * (functionFResult + partX + partY);    
+                
+                U1ijm1 = U1ij;
+                U1ij = U1ijp1;
+                Pijm1 = Pij;
                 //Umax = (fabs(*(U2 + i * Ny + j)) > Umax) ? fabs(*(U2 + i * Ny + j)) : Umax;
             }
         }
